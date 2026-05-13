@@ -24,9 +24,11 @@ namespace Ong.Application.Worker.Clients
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
                 _logger.LogError(
                     "Falha ao notificar doação para campanha {CampaignId}. Status: {StatusCode}. Resposta: {Body}",
                     campaignId, response.StatusCode, body);
+
                 throw new HttpRequestException(
                     $"Falha ao notificar campanha {campaignId}. Status: {(int)response.StatusCode}");
             }
