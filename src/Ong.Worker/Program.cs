@@ -31,7 +31,7 @@ builder.Services.AddHangfire(config => config
         options.UseNpgsqlConnection(connectionString);
     }));
 
-builder.Services.AddApplicationWorkerLayer(builder.Configuration);
+builder.Services.AddApplicationWorkerLayer(builder.Configuration, builder.Environment);
 
 builder.Services.AddHangfireServer(options =>
 {

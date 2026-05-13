@@ -2,27 +2,34 @@ name: CI - Ong.Worker
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 env:
   DOTNET_VERSION: '10.0.x'
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/ong-worker
 
 jobs:
   build-and-test:
     name: 🔨 Build & Testes
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: ⚙️ Configurar .NET
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           dotnet-quality: preview
+
+      - name: 🗂️ Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
 
       - name: 📦 Restore
         run: dotnet restore Ong.Worker.sln
@@ -30,16 +37,18 @@ jobs:
       - name: 🏗️ Build
         run: dotnet build Ong.Worker.sln --configuration Release --no-restore
 
-      - name: 🧪 Testes
+      - name: 🧪 Testes com cobertura
         run: |
           dotnet test tests/Ong.Tests/Ong.Tests.csproj \
             --configuration Release \
             --no-build \
             --verbosity normal \
             --logger "trx;LogFileName=test-results.trx" \
-            --results-directory ./test-results
+            --results-directory ./test-results \
+            --collect:"XPlat Code Coverage" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
 
-      - name: 📊 Publicar Resultados
+      - name: 📊 Publicar Resultados dos Testes
         uses: dorny/test-reporter@v1
         if: always()
         with:
@@ -47,38 +56,9 @@ jobs:
           path: ./test-results/*.trx
           reporter: dotnet-trx
 
-  docker:
-    name: 🐳 Docker Build & Push
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 🔐 Login GHCR
-        uses: docker/login-action@v3
+      - name: 📈 Publicar Cobertura
+        uses: codecov/codecov-action@v4
+        if: always()
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🏷️ Metadados
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest
-
-      - name: 🚀 Build & Push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: src/Ong.Worker/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          files: ./test-results/**/coverage.cobertura.xml
+          fail_ci_if_error: false
